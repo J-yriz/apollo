@@ -984,8 +984,12 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
         }
       }
       let _userMsgEl = null;
+      let _msgAttachMeta = _pendingAttachInfo;
+      if (!_msgAttachMeta && _pendingRegenAttachMeta && _pendingRegenAttachMeta.length) {
+        _msgAttachMeta = _pendingRegenAttachMeta;
+      }
       if (!skipBubble) {
-        _userMsgEl = addMessage('user', userDisplay, null, _pendingAttachInfo ? { attachments: _pendingAttachInfo } : null);
+        _userMsgEl = addMessage('user', userDisplay, null, _msgAttachMeta ? { attachments: _msgAttachMeta } : null);
       }
       _sendPerf.mark('user_bubble_visible');
       messageInput.value = '';
@@ -1049,6 +1053,7 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
         ids = ids.concat(_pendingRegenAttachments);
       }
       _pendingRegenAttachments = null;
+      _pendingRegenAttachMeta = null;
 
       // The optimistic user bubble was rendered before the upload assigned ids,
       // so image previews couldn't show (the renderer needs att.id). Now that
@@ -2364,68 +2369,63 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
                 }
               } else if (json.type === 'attachments') {
                 if (_isBg) continue;
-                // Update user bubble — replace file chips with image previews
                 const _ub = document.querySelector('#chat-history .msg-user:last-of-type');
                 if (_ub) {
-                  const _aw = _ub.querySelector('.attach-cards');
-                  if (_aw) {
-                    for (const _att of json.data) {
-                      const _isImg = (_att.mime || '').startsWith('image/') || /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(_att.name || '');
-                      if (_isImg && _att.id) {
-                        // Skip if we already have a preview for this file id —
-                        // on a regenerate the original user bubble keeps its
-                        // photo and the backend re-emits the attachment event
-                        // for the same id; without this guard we'd append a
-                        // duplicate (which visually pushes the real photo off).
-                        const _existingPreview = _aw.querySelector('[data-file-id="' + _att.id + '"]');
-                        if (_existingPreview) {
-                          if (_att.vision_model && !_existingPreview.querySelector('.attach-vision-model')) {
-                            const _vl = document.createElement('div');
-                            _vl.className = 'attach-vision-model';
-                            _vl.textContent = 'Vision: ' + String(_att.vision_model).split('/').pop();
-                            const _name = _existingPreview.querySelector('.attach-image-name');
-                            if (_name) _existingPreview.insertBefore(_vl, _name);
-                            else _existingPreview.appendChild(_vl);
-                          }
-                          continue;
-                        }
-                        const _card = _aw.querySelector('.attach-card[data-name="' + (_att.name || '').replace(/"/g, '\\"') + '"]');
-                        const _iw = document.createElement('div');
-                        _iw.className = 'attach-image-preview';
-                        _iw.dataset.fileId = _att.id;
-                        _iw.style.cursor = 'pointer';
-                        _iw.onclick = () => window.open(API_BASE + '/api/upload/' + _att.id, '_blank');
-                        const _im = document.createElement('img');
-                        _im.src = API_BASE + '/api/upload/' + _att.id;
-                        _im.alt = _att.name || 'Image';
-                        _im.style.cssText = 'max-width:300px;max-height:200px;border-radius:6px;display:block;';
-                        _iw.appendChild(_im);
-                        if (_att.vision_model) {
+                  let _aw = _ub.querySelector('.attach-cards');
+                  if (!_aw) {
+                    _aw = chatRenderer.buildAttachCards(json.data);
+                    const _body = _ub.querySelector('.body');
+                    if (_body) _ub.insertBefore(_aw, _body);
+                    else _ub.appendChild(_aw);
+                  }
+                  for (const _att of json.data) {
+                    const _isImg = (_att.mime || '').startsWith('image/') || /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(_att.name || '');
+                    if (_isImg && _att.id) {
+                      const _existingPreview = _aw.querySelector('[data-file-id="' + _att.id + '"]');
+                      if (_existingPreview) {
+                        if (_att.vision_model && !_existingPreview.querySelector('.attach-vision-model')) {
                           const _vl = document.createElement('div');
                           _vl.className = 'attach-vision-model';
                           _vl.textContent = 'Vision: ' + String(_att.vision_model).split('/').pop();
-                          _iw.appendChild(_vl);
+                          const _name = _existingPreview.querySelector('.attach-image-name');
+                          if (_name) _existingPreview.insertBefore(_vl, _name);
+                          else _existingPreview.appendChild(_vl);
                         }
-                        if (_att.name) {
-                          const _nm = document.createElement('div');
-                          _nm.className = 'attach-image-name';
-                          _nm.textContent = _att.name;
-                          _iw.appendChild(_nm);
-                        }
-                        if (_card) _card.replaceWith(_iw); else _aw.appendChild(_iw);
-                      } else {
-                        const _card = _aw.querySelector('.attach-card[data-name="' + (_att.name || '').replace(/"/g, '\\"') + '"]');
-                        if (_card && _att.id) {
-                          _card.dataset.fileId = _att.id;
-                          _card.style.cursor = 'pointer';
-                          _card.onclick = () => window.open(API_BASE + '/api/upload/' + _att.id, '_blank');
-                        }
+                        continue;
+                      }
+                      const _card = _aw.querySelector('.attach-card[data-name="' + (_att.name || '').replace(/"/g, '\\"') + '"]');
+                      const _iw = document.createElement('div');
+                      _iw.className = 'attach-image-preview';
+                      _iw.dataset.fileId = _att.id;
+                      _iw.style.cursor = 'pointer';
+                      _iw.onclick = () => window.open(API_BASE + '/api/upload/' + _att.id, '_blank');
+                      const _im = document.createElement('img');
+                      _im.src = API_BASE + '/api/upload/' + _att.id;
+                      _im.alt = _att.name || 'Image';
+                      _im.style.cssText = 'max-width:300px;max-height:200px;border-radius:6px;display:block;';
+                      _iw.appendChild(_im);
+                      if (_att.vision_model) {
+                        const _vl = document.createElement('div');
+                        _vl.className = 'attach-vision-model';
+                        _vl.textContent = 'Vision: ' + String(_att.vision_model).split('/').pop();
+                        _iw.appendChild(_vl);
+                      }
+                      if (_att.name) {
+                        const _nm = document.createElement('div');
+                        _nm.className = 'attach-image-name';
+                        _nm.textContent = _att.name;
+                        _iw.appendChild(_nm);
+                      }
+                      if (_card) _card.replaceWith(_iw); else _aw.appendChild(_iw);
+                    } else {
+                      const _card = _aw.querySelector('.attach-card[data-name="' + (_att.name || '').replace(/"/g, '\\"') + '"]');
+                      if (_card && _att.id) {
+                        _card.dataset.fileId = _att.id;
+                        _card.style.cursor = 'pointer';
+                        _card.onclick = () => window.open(API_BASE + '/api/upload/' + _att.id, '_blank');
                       }
                     }
                   }
-                  // Caption / OCR text is no longer rendered as an inline
-                  // collapsible on the user bubble — the user can view/edit
-                  // it via the "Caption" button on the photo thumbnail.
                 }
               } else if (json.type === 'rag_sources') {
                 if (_isBg) continue;
@@ -4301,6 +4301,7 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
       // ponytail: carry over files on message edit resubmit
       if (userMsgElement._attachments && userMsgElement._attachments.length) {
         _pendingRegenAttachments = userMsgElement._attachments.map(att => att.id).filter(Boolean);
+        _pendingRegenAttachMeta = userMsgElement._attachments;
       }
 
       const keepCount = msgIndex;
@@ -4545,6 +4546,10 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
   // File-ids carried over from the original user message during a regen, so
   // photos / OCR overrides survive into the new send. Consumed once.
   let _pendingRegenAttachments = null;
+  // Full attachment metadata carried over during edit — so the new bubble
+  // renders attach-cards immediately (and sets wrap._attachments) instead of
+  // waiting for the SSE 'attachments' event. Consumed once in handleChatSubmit.
+  let _pendingRegenAttachMeta = null;
 
   /**
    * Called after streaming completes to attach variant navigation if this was a regen.

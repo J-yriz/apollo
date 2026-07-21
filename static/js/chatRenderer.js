@@ -195,11 +195,13 @@ export function buildAttachCards(attachments) {
 // refresh, because the bubble is rendered before the upload assigns ids.
 export function updateMessageAttachments(msgWrap, attachments) {
   if (!msgWrap || !attachments?.length) return;
-  const body = msgWrap.querySelector('.body') || msgWrap;
-  const existing = body.querySelector('.attach-cards');
+  const existing = msgWrap.querySelector('.attach-cards');
   const fresh = buildAttachCards(attachments);
   if (existing) existing.replaceWith(fresh);
-  else body.appendChild(fresh);
+  else {
+    const body = msgWrap.querySelector('.body') || msgWrap;
+    body.parentNode.insertBefore(fresh, body);
+  }
 }
 
 // Quick full-size preview when the user taps a chat photo thumbnail. Just an

@@ -2040,8 +2040,7 @@ export async function selectSession(id, { keepSidebar = false, showLoading = tru
       const docInd = document.getElementById('doc-indicator-btn');
       if (docInd) docInd.classList.toggle('visible', hasDocs);
       if (hasDocs) {
-        // Wait for session UI to settle, then slide in documents
-        setTimeout(() => window.documentModule.loadSessionDocs(id, { restoreMode: true }), 300);
+        // Docs are loaded on demand — user clicks the doc button to open panel.
       } else if (!shouldOpen) {
         window.documentModule.closePanel();
       }
