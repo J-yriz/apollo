@@ -25,7 +25,7 @@ const SIDEBAR_MAX_VISIBLE = 10;
 const FOLDER_MAX_VISIBLE = 5;
 let _showAllSessions = false;
 let _expandedFolders = {};  // folderName -> true if "show more" clicked
-let _sortMode = Storage.get('odysseus-session-sort') || 'active'; // default to last active
+let _sortMode = Storage.get('apollo-session-sort') || 'active'; // default to last active
 let _autoCreateInProgress = false; // guard against recursive auto-create
 const _INCOGNITO_SESSIONS_KEY = 'ody-incognito-sessions'; // sessionStorage key for incognito session IDs
 const _isMac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -93,7 +93,7 @@ function _displayHistoryContent(content) {
 
 function _stripUserVisionBlocks(text) {
   return String(text || '').replace(
-    /\n*\[Image: ([^\]]+)\]\n[\s\S]*?(?=\n*\[Image: |\n*\[Image attached: |\n*=== File: |\n*\[PDF content\]:|$)/g,
+    /\n*\[Image: ([^\]]+)\]\n[\s\S]*?(?=\n*\[Image: |\n*\[Image attached: |\n*=== File: |\n*\[PDF content(?: — [^\]]+)?\]:|\n*\[Document content(?: — [^\]]+)?\]:|$)/g,
     ''
   ).trim();
 }
@@ -268,7 +268,7 @@ function _deselectCurrentSession(sid) {
   if (currentSessionId !== sid) return;
   currentSessionId = null;
   uiModule.el('chat-history').innerHTML = '';
-  uiModule.el('current-meta').textContent = 'Odysseus Chat';
+  uiModule.el('current-meta').textContent = 'Apollo Chat';
   Storage.remove('lastSessionId');
   history.replaceState(null, '', window.location.pathname);
   if (window.chatModule && window.chatModule.showWelcomeScreen) {
@@ -324,8 +324,8 @@ function _normalizeSessionsList(fetched) {
 export function initDependencies() {}
 
 // ── Folder state persistence ──
-const FOLDER_STATE_KEY = 'odysseus-folder-state';
-const FOLDER_ORDER_KEY = 'odysseus-folder-order';
+const FOLDER_STATE_KEY = 'apollo-folder-state';
+const FOLDER_ORDER_KEY = 'apollo-folder-order';
 
 function loadFolderState() {
   return Storage.getJSON(FOLDER_STATE_KEY, {});
@@ -1777,7 +1777,7 @@ export async function selectSession(id, { keepSidebar = false, showLoading = tru
     currentSessionId = id;
     // Identify Assistant / task-output sessions so we don't "trap" the user
     // there on return. Skipped from both `lastSessionId` persistence and the
-    // URL hash — the user complained that coming back to Odysseus kept
+    // URL hash — the user complained that coming back to Apollo kept
     // landing them on the auto-firing task-log chat instead of their last
     // real conversation.
     const _meta = sessions.find(s => s.id === id);
@@ -1855,7 +1855,7 @@ export async function selectSession(id, { keepSidebar = false, showLoading = tru
 
     const currentMetaEl = uiModule.el('current-meta');
     if (currentMetaEl) {
-      currentMetaEl.textContent = meta ? meta.name : 'Odysseus Chat';
+      currentMetaEl.textContent = meta ? meta.name : 'Apollo Chat';
     }
     // Update model picker visibility
     updateModelPicker();
@@ -2031,7 +2031,7 @@ export async function selectSession(id, { keepSidebar = false, showLoading = tru
     if (window.documentModule) {
       const docBtn = document.getElementById('overflow-doc-btn');
       const meta = sessions.find(s => s.id === id);
-      const shouldOpen = localStorage.getItem('odysseus-doc-open-' + id) === '1';
+      const shouldOpen = localStorage.getItem('apollo-doc-open-' + id) === '1';
       const hasDocs = !!(meta && meta.has_documents);
       if (docBtn) {
         docBtn.classList.remove('active');
@@ -2066,8 +2066,8 @@ export async function selectSession(id, { keepSidebar = false, showLoading = tru
     // is idle.
     if (window.memoryModule && window.memoryModule.loadMemories) {
       setTimeout(() => {
-        const busy = !!window.__odysseusChatBusy
-          || Date.now() < (window.__odysseusChatBusyUntil || 0)
+        const busy = !!window.__apolloChatBusy
+          || Date.now() < (window.__apolloChatBusyUntil || 0)
           || !!document.querySelector('.send-btn[data-mode="streaming"], .send-btn.send-pending');
         if (!busy) window.memoryModule.loadMemories().catch(() => {});
       }, 2500);
@@ -3433,8 +3433,8 @@ export function closeArchive() {
 export function getSortMode() { return _sortMode; }
 export function setSortMode(mode) {
   _sortMode = mode || null;
-  if (mode) Storage.set('odysseus-session-sort', mode);
-  else Storage.remove('odysseus-session-sort');
+  if (mode) Storage.set('apollo-session-sort', mode);
+  else Storage.remove('apollo-session-sort');
   renderSessionList();
 }
 

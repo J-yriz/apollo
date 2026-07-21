@@ -1,11 +1,14 @@
 # Roadmap / Help Wanted
 
-Odysseus is on a voyage, but not home yet. It works great for me (lol), but this ship is moving fast and feedback/help would be appreciated! (I don't know what I'm doing, help).
+Apollo is a continuation and fork of Odysseus. While keeping the same solid foundation, Apollo aims to scale further with advanced product requirements (PRDs) and advanced features.
 
-If you see weird CSS, strange layout behavior, or a suspiciously murky corner of
-the codebase, you are probably right to stay away.
+> **Note for Future Roadmap**: Additional planned PRDs and advanced features will be added here once defined.
 
 ## High Priority
+
+- **[TBD] PRD / Feature Slot 1** — *Reserved for future advanced features.*
+- **[TBD] PRD / Feature Slot 2** — *Reserved for future advanced features.*
+- **[TBD] PRD / Feature Slot 3** — *Reserved for future advanced features.*
 
 - SQUASH BUGS
 - Fresh install smoke tests on Linux, macOS, and Windows. Docker, native Python,

@@ -48,3 +48,23 @@ pytest-asyncio
 # TestClient import when only classic httpx is present. Runtime code keeps
 # using `httpx` above; this is test-client only.
 httpx2
+
+# ====== Optional dependencies (graceful fallback if missing) ======
+
+# Local speech-to-text via faster-whisper. CPU out of the box (CTranslate2
+# backend, no torch). Optional: add `torch` for CUDA GPU acceleration.
+faster-whisper
+
+# DuckDuckGo as a search provider option.
+ddgs
+
+# PDF form-filling (AcroForm detection, field extraction, stamping).
+# NOTE: PyMuPDF is AGPL-3.0 — see ACKNOWLEDGMENTS.md. MIT core (text
+# extraction via pypdf) works without it.
+PyMuPDF
+
+# Office / EPUB document text extraction (chat attachments + personal-docs
+# RAG). markitdown converts .docx/.xlsx/.pptx/.xls/.epub to Markdown.
+# Lazy-imported via src/markitdown_runtime.py; missing formats show a
+# friendly install banner.
+markitdown[docx,pptx,xlsx,xls]==0.1.6

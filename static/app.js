@@ -1,5 +1,5 @@
 // ============================================
-// Odysseus UI — Main Application Orchestrator
+// Apollo UI — Main Application Orchestrator
 // ES6 module — entry point, no exports (wires all modules together)
 // ============================================
 import Storage from './js/storage.js';
@@ -65,8 +65,8 @@ function _submitChatFormDirect(form) {
 
 function _isForegroundChatBusy() {
   const sendBtn = document.querySelector('.send-btn');
-  return !!window.__odysseusChatBusy
-    || Date.now() < (window.__odysseusChatBusyUntil || 0)
+  return !!window.__apolloChatBusy
+    || Date.now() < (window.__apolloChatBusyUntil || 0)
     || !!document.querySelector('.send-btn[data-mode="streaming"], .send-btn.send-pending')
     || (sendBtn && (sendBtn.title || '').toLowerCase().includes('stop'));
 }
@@ -105,7 +105,7 @@ function _submitMobileQueuedInput(input) {
   if (chatModule && chatModule.queueStreamingComposerRequest && chatModule.queueStreamingComposerRequest()) {
     return true;
   }
-  window.__odysseusQueueStreamingSubmit = now;
+  window.__apolloQueueStreamingSubmit = now;
   const form = document.getElementById('chat-form');
   _submitChatFormDirect(form);
   return true;
@@ -209,7 +209,7 @@ async function _refreshDefaultChat() {
     const d = await (await fetch('/api/default-chat')).json();
     if (d && d.endpoint_url && d.model) {
       _defaultChat = d;
-      try { window.__odysseusDefaultChat = d; } catch (_) {}
+      try { window.__apolloDefaultChat = d; } catch (_) {}
       return d;
     }
   } catch (_) {}
@@ -529,7 +529,7 @@ function initializeEventListeners() {
       e.stopPropagation();
       exportMenu.classList.remove('open');
       const meta = sessionModule.getSessions().find(s => s.id === sessionModule.getCurrentSessionId());
-      const sessionName = meta ? meta.name : 'Odysseus Chat';
+      const sessionName = meta ? meta.name : 'Apollo Chat';
       const originalTitle = document.title;
       document.title = sessionName;
       const chatHistory = document.getElementById('chat-history');
@@ -1230,7 +1230,7 @@ function initializeEventListeners() {
   // click handler in emailInbox, sessionModule's loaded session list) are
   // still being wired up further down in this same function. Stash the
   // opener so it runs from sessionModule.loadSessions().finally() below.
-  if (_opener) window._odysseusRouteOpener = _opener;
+  if (_opener) window._apolloRouteOpener = _opener;
 
   // Archive browser tool button
   const toolLibraryBtn = el('tool-library-btn');
@@ -1478,7 +1478,7 @@ function initializeEventListeners() {
     modelSortDropdown.querySelectorAll('.sort-option').forEach(opt => {
       opt.addEventListener('click', () => {
         const mode = opt.dataset.sort;
-        Storage.set('odysseus-model-sort', mode);
+        Storage.set('apollo-model-sort', mode);
         if (modelsModule) modelsModule.refreshModels();
         modelSortDropdown.style.display = 'none';
         uiModule.showToast('Models sorted: ' + opt.textContent.trim().toLowerCase());
@@ -1768,9 +1768,8 @@ function initializeEventListeners() {
   (function initModeToggle() {
     const agentBtn = el('mode-agent-btn');
     const chatBtn = el('mode-chat-btn');
-    if (!agentBtn || !chatBtn) return;
     const state = loadToggleState();
-    let currentMode = state.mode || 'chat';
+    let currentMode = 'agent'; // ponytail: always default to agent mode now
 
     // Immediately hide bash button in chat mode on page load
     if (currentMode === 'chat') {
@@ -1783,31 +1782,35 @@ function initializeEventListeners() {
       const st = loadToggleState();
       st.mode = mode;
       saveToggleState(st);
-      agentBtn.classList.toggle('active', mode === 'agent');
-      chatBtn.classList.toggle('active', mode === 'chat');
-      agentBtn.setAttribute('aria-pressed', String(mode === 'agent'));
-      chatBtn.setAttribute('aria-pressed', String(mode === 'chat'));
+      if (agentBtn) agentBtn.classList.toggle('active', mode === 'agent');
+      if (chatBtn) chatBtn.classList.toggle('active', mode === 'chat');
+      if (agentBtn) agentBtn.setAttribute('aria-pressed', String(mode === 'agent'));
+      if (chatBtn) chatBtn.setAttribute('aria-pressed', String(mode === 'chat'));
       // Slide the pill to the active button
-      const toggle = agentBtn.closest('.mode-toggle');
+      const toggle = agentBtn ? agentBtn.closest('.mode-toggle') : null;
       if (toggle) toggle.classList.toggle('mode-chat', mode === 'chat');
       // Workspace pill + overflow entry are agent-only - hide immediately (no flash).
       try { workspaceModule.applyMode(mode); } catch (_) {}
       // Delay tool glow-up for a staggered effect
       setTimeout(() => applyModeToToggles(mode), 500);
     }
-    window.__odysseusSetChatMode = setMode;
-    agentBtn.addEventListener('click', () => {
-      // Agent mode turns off research if active
-      const resChk = el('research-toggle');
-      if (resChk && resChk.checked) _syncResearchIndicator(false);
-      setMode('agent');
-    });
-    chatBtn.addEventListener('click', () => setMode('chat'));
+    window.__apolloSetChatMode = setMode;
+    if (agentBtn) {
+      agentBtn.addEventListener('click', () => {
+        // Agent mode turns off research if active
+        const resChk = el('research-toggle');
+        if (resChk && resChk.checked) _syncResearchIndicator(false);
+        setMode('agent');
+      });
+    }
+    if (chatBtn) {
+      chatBtn.addEventListener('click', () => setMode('chat'));
+    }
     setMode(currentMode);
   })();
 
   // ── Tool splash explainer messages (shown first 2 times per tool) ──
-  const SPLASH_COUNT_KEY = 'odysseus-tool-splash-counts';
+  const SPLASH_COUNT_KEY = 'apollo-tool-splash-counts';
   const SPLASH_MAX = 2;
   const _toolSplashes = {
     web: { role: 'Web Search', text: 'Searches the web for relevant information to include in the response. Results are fetched and summarized before the AI answers.' },
@@ -2055,8 +2058,6 @@ function initializeEventListeners() {
       menu.classList.remove('hidden');
       plusBtn.classList.add('expanded');
       document.body.appendChild(menu);  // escape the composer's container-type trap
-      // Hide pill bar label so it doesn't show through the menu
-      if (pickerWrap) pickerWrap.style.visibility = 'hidden';
       // Keep the textarea focused so the keyboard stays up if it was open (the
       // pointerdown handler above prevents the focus-steal). Still watch
       // visualViewport so the menu follows the chevron if the viewport shifts.
@@ -2079,7 +2080,6 @@ function initializeEventListeners() {
       // scales back into the chevron) before flipping to display:none.
       menu.classList.add('closing');
       plusBtn.classList.remove('expanded');
-      if (pickerWrap) pickerWrap.style.visibility = '';
       // Item delays max at 0.18s + 0.20s anim = 0.38s for items, container
       // delay 0.16s + 0.22s = 0.38s. 400ms covers both with margin.
       setTimeout(() => {
@@ -2142,15 +2142,15 @@ function initializeEventListeners() {
             if (webBtn) webBtn.classList.remove('active');
             saveToolPref('web', (loadToggleState().mode || 'chat'), false);
           }
-          // Research requires chat mode — force switch from agent
+          // Research in agent mode
           const rs = loadToggleState();
-          if (rs.mode === 'agent') {
-            rs.mode = 'chat';
+          if (rs.mode !== 'agent') {
+            rs.mode = 'agent';
             saveToggleState(rs);
             const ab = el('mode-agent-btn'), cb = el('mode-chat-btn');
-            if (ab) ab.classList.remove('active');
-            if (cb) cb.classList.add('active');
-            applyModeToToggles('chat');
+            if (ab) ab.classList.add('active');
+            if (cb) cb.classList.remove('active');
+            applyModeToToggles('agent');
           }
         }
       });
@@ -2315,7 +2315,7 @@ function initializeEventListeners() {
       // Keep a prompt inside the composer even when the picker crowds the row.
       // A blank placeholder makes the mobile/compact empty state feel broken.
       if (textarea) {
-        textarea.setAttribute('placeholder', w < PLACEHOLDER_COMPACT_WIDTH ? 'Message...' : 'Message Odysseus...');
+        textarea.setAttribute('placeholder', w < PLACEHOLDER_COMPACT_WIDTH ? 'Message...' : 'Message Apollo...');
       }
       // Hide entire bottom toolbar (tools, mode toggle) — only send button remains
       if (inputBottom) {
@@ -2395,15 +2395,15 @@ function initializeEventListeners() {
           if (webBtn) webBtn.classList.remove('active');
           saveToolPref('web', (loadToggleState().mode || 'chat'), false);
         }
-        // Research requires chat mode
+        // Research in agent mode
         const rs2 = loadToggleState();
-        if (rs2.mode === 'agent') {
-          rs2.mode = 'chat';
+        if (rs2.mode !== 'agent') {
+          rs2.mode = 'agent';
           saveToggleState(rs2);
           const ab2 = el('mode-agent-btn'), cb2 = el('mode-chat-btn');
-          if (ab2) ab2.classList.remove('active');
-          if (cb2) cb2.classList.add('active');
-          applyModeToToggles('chat');
+          if (ab2) ab2.classList.add('active');
+          if (cb2) cb2.classList.remove('active');
+          applyModeToToggles('agent');
         }
       }
     });
@@ -2509,22 +2509,22 @@ function initializeEventListeners() {
         const _offIds = ['web-toggle', 'bash-toggle', 'research-toggle'];
         _offIds.forEach(id => { const c = el(id); if (c) c.checked = false; });
         ['web-toggle-btn', 'bash-toggle-btn'].forEach(id => { const b = el(id); if (b) b.classList.remove('active'); });
-        if (typeof window.__odysseusSetChatMode === 'function') {
-          window.__odysseusSetChatMode('chat');
+        if (typeof window.__apolloSetChatMode === 'function') {
+          window.__apolloSetChatMode('agent');
         } else {
           const _ab = el('mode-agent-btn'), _cb = el('mode-chat-btn');
           if (_ab) {
-            _ab.classList.remove('active');
-            _ab.setAttribute('aria-pressed', 'false');
+            _ab.classList.add('active');
+            _ab.setAttribute('aria-pressed', 'true');
           }
           if (_cb) {
-            _cb.classList.add('active');
-            _cb.setAttribute('aria-pressed', 'true');
+            _cb.classList.remove('active');
+            _cb.setAttribute('aria-pressed', 'false');
           }
           const _toggle = _ab?.closest('.mode-toggle') || _cb?.closest('.mode-toggle');
-          if (_toggle) _toggle.classList.add('mode-chat');
+          if (_toggle) _toggle.classList.remove('mode-chat');
           const ts = Storage.getJSON(Storage.KEYS.TOGGLES, {});
-          ts.mode = 'chat';
+          ts.mode = 'agent';
           Storage.setJSON(Storage.KEYS.TOGGLES, ts);
         }
         const ts = Storage.getJSON(Storage.KEYS.TOGGLES, {});
@@ -2558,8 +2558,8 @@ function initializeEventListeners() {
           if (_ts[k] === false) delete _ts[k];
         });
         Storage.setJSON(Storage.KEYS.TOGGLES, _ts);
-        if (typeof window.__odysseusSetChatMode === 'function') {
-          window.__odysseusSetChatMode(_restoreMode === 'chat' ? 'chat' : 'agent');
+        if (typeof window.__apolloSetChatMode === 'function') {
+          window.__apolloSetChatMode(_restoreMode === 'chat' ? 'agent' : 'agent');
         }
         // Reapply the current mode's real defaults to the visible toggles
         const _curMode = (Storage.getJSON(Storage.KEYS.TOGGLES, {}) || {}).mode || 'chat';
@@ -2598,7 +2598,7 @@ function initializeEventListeners() {
   }
 
   // ── UI Visibility (Customize UI modal) ──
-  const UI_VIS_KEY = 'odysseus-ui-visibility';
+  const UI_VIS_KEY = 'apollo-ui-visibility';
 
   // Selector map: key → CSS selector(s) for targets
   const UI_VIS_MAP = {
@@ -2879,7 +2879,7 @@ function initializeEventListeners() {
 
   // Migrate old toolbar visibility key if present
   (function migrateOldToolbarVis() {
-    const OLD_KEY = 'odysseus-toolbar-visibility';
+    const OLD_KEY = 'apollo-toolbar-visibility';
     try {
       const old = Storage.getJSON(OLD_KEY, null);
       if (old && typeof old === 'object') {
@@ -3329,7 +3329,7 @@ function initializeEventListeners() {
   const textarea = el('message');
   if (textarea) {
     _syncMobileEnterKeyHint(textarea);
-    window.addEventListener('odysseus:chat-busy-change', () => _syncMobileEnterKeyHint(textarea));
+    window.addEventListener('apollo:chat-busy-change', () => _syncMobileEnterKeyHint(textarea));
     uiModule.autoResize(textarea);
     let previousTextareaValue = textarea.value || '';
     textarea.addEventListener('beforeinput', (e) => {
@@ -3376,7 +3376,7 @@ function initializeEventListeners() {
             if (chatModule && chatModule.queueStreamingComposerRequest && chatModule.queueStreamingComposerRequest()) {
               return;
             }
-            window.__odysseusQueueStreamingSubmit = Date.now();
+            window.__apolloQueueStreamingSubmit = Date.now();
           }
           _submitChatFormDirect(form);
         }
@@ -3575,12 +3575,12 @@ function initializeEventListeners() {
 // ============================================
 // INITIALIZATION ON PAGE LOAD
 // ============================================
-function startOdysseusApp() {
-  if (window.__odysseusAppStarted) return;
-  window.__odysseusAppStarted = true;
+function startApolloApp() {
+  if (window.__apolloAppStarted) return;
+  window.__apolloAppStarted = true;
   const _bumpChatPriority = (ms = 10000) => {
     try {
-      window.__odysseusChatBusyUntil = Math.max(window.__odysseusChatBusyUntil || 0, Date.now() + ms);
+      window.__apolloChatBusyUntil = Math.max(window.__apolloChatBusyUntil || 0, Date.now() + ms);
     } catch (_) {}
   };
   _bumpChatPriority(10000);
@@ -3633,7 +3633,7 @@ function startOdysseusApp() {
     documentModule.init(API_BASE);
     // Restore document panel if it was open before refresh
     const _curSession = sessionModule && sessionModule.getCurrentSessionId();
-    if (_curSession && localStorage.getItem('odysseus-doc-open-' + _curSession) === '1') {
+    if (_curSession && localStorage.getItem('apollo-doc-open-' + _curSession) === '1') {
       documentModule.loadSessionDocs(_curSession);
     }
   }  
@@ -3803,7 +3803,7 @@ function startOdysseusApp() {
   const _newChatIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
 
   // Expose icons globally so chat.js updateSubmitButton can use them
-  window._odysseusBtnIcons = { send: _sendIcon, mic: _micIcon, stop: _stopIcon, newChat: _newChatIcon };
+  window._apolloBtnIcons = { send: _sendIcon, mic: _micIcon, stop: _stopIcon, newChat: _newChatIcon };
 
   function _isSttEnabled() {
     return voiceRecorderModule._sttProvider && voiceRecorderModule._sttProvider !== 'disabled';
@@ -3934,7 +3934,7 @@ function startOdysseusApp() {
       const hasFiles = _hasAttachments();
 
       if (sendBtn.dataset.mode === 'streaming') {
-        if (hasText) window.__odysseusQueueStreamingSubmit = Date.now();
+        if (hasText) window.__apolloQueueStreamingSubmit = Date.now();
         handleSubmit(e);
         return;
       }
@@ -3996,7 +3996,7 @@ function startOdysseusApp() {
           if (chatModule && chatModule.queueStreamingComposerRequest && chatModule.queueStreamingComposerRequest()) {
             return;
           }
-          window.__odysseusQueueStreamingSubmit = Date.now();
+          window.__apolloQueueStreamingSubmit = Date.now();
         }
         _submitChatFormDirect(document.getElementById('chat-form'));
       }
@@ -4205,9 +4205,9 @@ function startOdysseusApp() {
         if (loader) { loader.style.opacity = '0'; setTimeout(() => loader.remove(), 300); }
         // Fire any URL route opener now that sessions + module wiring are
         // ready. Deferred from up top of init for exactly this reason.
-        if (window._odysseusRouteOpener) {
-          try { window._odysseusRouteOpener(); } catch (_) {}
-          window._odysseusRouteOpener = null;
+        if (window._apolloRouteOpener) {
+          try { window._apolloRouteOpener(); } catch (_) {}
+          window._apolloRouteOpener = null;
         }
       });
   } else {
@@ -4217,8 +4217,8 @@ function startOdysseusApp() {
   const runNonCriticalStartup = (fn, delay = 4000) => {
     let tries = 0;
     const run = () => {
-      const busy = !!window.__odysseusChatBusy
-        || Date.now() < (window.__odysseusChatBusyUntil || 0)
+      const busy = !!window.__apolloChatBusy
+        || Date.now() < (window.__apolloChatBusyUntil || 0)
         || !!document.querySelector('.send-btn[data-mode="streaming"], .send-btn.send-pending');
       if (busy && tries < 12) {
         tries += 1;
@@ -4383,7 +4383,7 @@ function startOdysseusApp() {
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', startOdysseusApp, { once: true });
+  document.addEventListener('DOMContentLoaded', startApolloApp, { once: true });
 } else {
-  startOdysseusApp();
+  startApolloApp();
 }

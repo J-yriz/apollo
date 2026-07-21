@@ -69,12 +69,9 @@ RUN ARCH="$(dpkg --print-architecture)" \
 
 WORKDIR /app
 
-# Install Python deps first (layer cache). Optional extras (PyMuPDF AGPL, etc.)
-# are opt-in so the default image stays MIT-core; see requirements-optional.txt.
-ARG INSTALL_OPTIONAL=false
-COPY requirements.txt requirements-optional.txt ./
-RUN pip install --no-cache-dir -r requirements.txt \
-    && if [ "$INSTALL_OPTIONAL" = "true" ]; then pip install --no-cache-dir -r requirements-optional.txt; fi
+# Install Python deps first (layer cache).
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 # python-magic powers content-based MIME sniffing in src/upload_handler.py.
 # Image-only (not in requirements.txt) because it needs the libmagic1 system
@@ -86,9 +83,9 @@ RUN pip install --no-cache-dir python-magic==0.4.27
 # pulled only when realesrgan is actually installed). With these dists already
 # satisfied, the Cookbook's plain `pip install realesrgan` resolves them from
 # wheels instead of rebuilding the sdists that fail on Python 3.14.
-COPY --from=realesrgan-wheels /wheels/ /tmp/odysseus-wheels/
-RUN pip install --no-cache-dir --no-deps /tmp/odysseus-wheels/*.whl \
-    && rm -rf /tmp/odysseus-wheels
+COPY --from=realesrgan-wheels /wheels/ /tmp/apollo-wheels/
+RUN pip install --no-cache-dir --no-deps /tmp/apollo-wheels/*.whl \
+    && rm -rf /tmp/apollo-wheels
 
 # Copy app code
 COPY . .
