@@ -46,9 +46,9 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
 
   function _setForegroundChatBusy(active) {
     try {
-      window.__odysseusChatBusy = !!active;
-      window.__odysseusChatBusyUntil = active ? Date.now() + 120000 : Date.now() + 1200;
-      window.dispatchEvent(new CustomEvent('odysseus:chat-busy-change', { detail: { active: !!active } }));
+      window.__apolloChatBusy = !!active;
+      window.__apolloChatBusyUntil = active ? Date.now() + 120000 : Date.now() + 1200;
+      window.dispatchEvent(new CustomEvent('apollo:chat-busy-change', { detail: { active: !!active } }));
     } catch (_) {}
   }
   let _pendingContinue = null; // Stores the stopped AI element to merge with new response
@@ -382,7 +382,7 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
       // Clear any pending transitions from + → arrow swap
       submitBtn.classList.remove('anim-spin', 'anim-spin-swap', 'anim-land', 'mic-mode', 'newchat-mode', 'newchat-expanded', 'recording');
       // Ensure arrow icon is showing before launch
-      var icons = window._odysseusBtnIcons;
+      var icons = window._apolloBtnIcons;
       if (icons) submitBtn.innerHTML = icons.send;
       void submitBtn.offsetWidth;
       // Arrow launches up, then stop icon lands in
@@ -420,7 +420,7 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
       if (window._updateSendBtnIcon) {
         setTimeout(window._updateSendBtnIcon, 50);
       } else {
-        var icons = window._odysseusBtnIcons;
+        var icons = window._apolloBtnIcons;
         submitBtn.innerHTML = icons ? icons.send : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
         submitBtn.title = 'Send message';
         submitBtn.classList.remove('mic-mode', 'newchat-mode');
@@ -599,9 +599,9 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
     // If currently streaming, keyboard Enter can queue a non-empty composer.
     // Clicking the stop icon should still stop normally, even if text exists.
     if (isStreaming) {
-      const queueRequestedAt = Number(window.__odysseusQueueStreamingSubmit || 0);
+      const queueRequestedAt = Number(window.__apolloQueueStreamingSubmit || 0);
       const shouldQueueStreamingSubmit = queueRequestedAt && Date.now() - queueRequestedAt < 1200;
-      window.__odysseusQueueStreamingSubmit = 0;
+      window.__apolloQueueStreamingSubmit = 0;
       if (shouldQueueStreamingSubmit && queueStreamingComposerRequest()) {
         return;
       }
@@ -821,10 +821,10 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
           dc = await dcRes.json();
           _sendPerf.mark('default_chat_fetch_done');
           if (dc && dc.endpoint_url && dc.model) {
-            try { window.__odysseusDefaultChat = dc; } catch (_) {}
+            try { window.__apolloDefaultChat = dc; } catch (_) {}
           }
         } catch (_) {
-          dc = (typeof window !== 'undefined' && window.__odysseusDefaultChat) || null;
+          dc = (typeof window !== 'undefined' && window.__apolloDefaultChat) || null;
         }
         if (dc.endpoint_url && dc.model) {
           _sendPerf.mark('direct_chat_create_begin');
@@ -885,7 +885,7 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
 
     // Acquire Web Lock to hint browser not to discard this tab while streaming
     if (navigator.locks) {
-      navigator.locks.request('odysseus-stream-' + streamSessionId, { mode: 'exclusive', ifAvailable: true }, lock => {
+      navigator.locks.request('apollo-stream-' + streamSessionId, { mode: 'exclusive', ifAvailable: true }, lock => {
         if (!lock) return; // Another stream already holds a lock — fine
         return new Promise(resolve => { _webLockRelease = resolve; });
       }).catch(e => console.warn('web lock acquire failed:', e)); // Ignore lock errors — best-effort
@@ -1183,7 +1183,7 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
       // resolve to the email the user is actually looking at instead of
       // making the agent invent a new markdown draft with fake headers.
       try {
-        const getEmailCtx = window.__odysseusGetActiveEmailContext;
+        const getEmailCtx = window.__apolloGetActiveEmailContext;
         const emCtx = typeof getEmailCtx === 'function' ? getEmailCtx() : null;
         if (activeEmailComposerCtx && activeEmailComposerCtx.sourceUid) {
           fd.append('active_email_uid', String(activeEmailComposerCtx.sourceUid));
@@ -3465,7 +3465,7 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
             if (_box && sessionModule.getCurrentSessionId() === _timeoutSessionId) {
               var _timeoutMsg = document.createElement('div');
               _timeoutMsg.className = 'msg msg-ai';
-              _timeoutMsg.innerHTML = '<div class="role">Odysseus</div><div class="body" style="opacity:0.6;font-style:italic;">Research clarification timed out. Toggle research again to start over.</div>';
+              _timeoutMsg.innerHTML = '<div class="role">Apollo</div><div class="body" style="opacity:0.6;font-style:italic;">Research clarification timed out. Toggle research again to start over.</div>';
               _box.appendChild(_timeoutMsg);
               uiModule.scrollHistory();
             }
@@ -4243,7 +4243,17 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
     if (msgIndex < 0) return;
 
     const bodyEl = userMsgElement.querySelector('.body');
-    const currentText = bodyEl ? bodyEl.textContent.trim().replace(/\s*\[\d+ attachment\(s\)\]$/, '') : '';
+    let currentText = bodyEl ? bodyEl.textContent.trim() : '';
+    // ponytail: clean file content/metadata suffixes from prompt text for clean editing
+    currentText = currentText.replace(/\n*\[Image attached: [^\]]+\]/g, '');
+    currentText = currentText.replace(/\n*\[Image: [^\]]+\]/g, '');
+    currentText = currentText.replace(/\n*=== File: [\s\S]*? ===\n*/g, '');
+    currentText = currentText.replace(/\n*\[PDF content\]:[\s\S]*/g, '');
+    currentText = currentText.replace(/\s*\[\d+ attachment\(s\)\]$/, '');
+    currentText = currentText.trim();
+
+    const attachCards = userMsgElement.querySelector('.attach-cards');
+    if (attachCards) attachCards.style.display = 'none';
 
     // Replace body with an editable textarea
     const editor = document.createElement('textarea');
@@ -4252,7 +4262,7 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
     editor.rows = Math.max(2, currentText.split('\n').length);
 
     const btnRow = document.createElement('div');
-    btnRow.style.cssText = 'display:flex; gap:6px; margin-top:4px;';
+    btnRow.className = 'edit-btn-row';
 
     const saveBtn = document.createElement('button');
     saveBtn.className = 'edit-save-btn';
@@ -4267,11 +4277,17 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
     bodyEl.innerHTML = '';
     bodyEl.appendChild(editor);
     bodyEl.appendChild(btnRow);
-    editor.focus();
+    const autoGrow = () => {
+      editor.style.height = 'auto';
+      editor.style.height = editor.scrollHeight + 'px';
+    };
+    editor.addEventListener('input', autoGrow);
+    autoGrow();
 
     cancelBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       bodyEl.innerHTML = originalHTML;
+      if (attachCards) attachCards.style.display = '';
     });
 
     saveBtn.addEventListener('click', async (e) => {
@@ -4281,6 +4297,11 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
 
       const sessionId = sessionModule.getCurrentSessionId();
       if (!sessionId) return;
+
+      // ponytail: carry over files on message edit resubmit
+      if (userMsgElement._attachments && userMsgElement._attachments.length) {
+        _pendingRegenAttachments = userMsgElement._attachments.map(att => att.id).filter(Boolean);
+      }
 
       const keepCount = msgIndex;
       try {
@@ -5433,7 +5454,7 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
   // streaming, history-rendered, compare-mode, all of them. Re-attaching
   // per-node listeners on every innerHTML rewrite was the source of the
   // "needs many clicks" bug.
-  if (!window.__odysseus_thread_click_bound) {
+  if (!window.__apollo_thread_click_bound) {
     document.body.addEventListener('click', (e) => {
       const header = e.target.closest('.agent-thread-header');
       if (!header) return;
@@ -5450,7 +5471,7 @@ import { wireArrowUpRecall, getLastUserMessageFromChatHistory } from './composer
         }
       }
     });
-    window.__odysseus_thread_click_bound = true;
+    window.__apollo_thread_click_bound = true;
   }
 
   export default chatModule;

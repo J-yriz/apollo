@@ -153,37 +153,8 @@ export function buildAttachCards(attachments) {
         // repeated re-renders don't accumulate stranded timers.
         if (!att.previewUrl) _revealTimer = setTimeout(_reveal, 8000);
         imgWrap.appendChild(img);
-
-        if (att.id) {
-          // Small corner button → opens the vision/OCR editor so the user can
-          // correct what the vision model extracted. The edit is cached on the
-          // server keyed by file id, so any later message referencing this same
-          // image picks up the corrected text instead of re-running the model.
-          const ocrBtn = document.createElement('button');
-          ocrBtn.type = 'button';
-          ocrBtn.className = 'attach-ocr-btn';
-          ocrBtn.title = 'View / edit OCR text';
-          ocrBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg><span class="attach-ocr-label">Caption</span>';
-          ocrBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            _openVisionEditor(att, ocrBtn.closest('.msg'));
-          });
-          imgWrap.appendChild(ocrBtn);
-        }
       }
 
-      if (att.vision_model) {
-        const visionLabel = document.createElement('div');
-        visionLabel.className = 'attach-vision-model';
-        visionLabel.textContent = 'Vision: ' + String(att.vision_model).split('/').pop();
-        imgWrap.appendChild(visionLabel);
-      }
-      if (att.name) {
-        const label = document.createElement('div');
-        label.className = 'attach-image-name';
-        label.textContent = att.name;
-        imgWrap.appendChild(label);
-      }
       attachWrap.appendChild(imgWrap);
     } else {
       // Non-image file card
@@ -1482,7 +1453,7 @@ export function showWelcomeScreen() {
 }
 
 // ── Dynamic action buttons (show 3 most recent, rest under ···) ──
-const _ACTION_RECENTS_KEY = 'odysseus-msg-actions-recent';
+const _ACTION_RECENTS_KEY = 'apollo-msg-actions-recent';
 const _MAX_VISIBLE = 2;
 
 function _getRecentActions() {
@@ -1698,7 +1669,7 @@ export function createMsgFooter(msgElement) {
 /**
  * Create a footer row for a user message with action buttons (same system as AI footer).
  */
-const _USER_ACTION_RECENTS_KEY = 'odysseus-user-actions-recent';
+const _USER_ACTION_RECENTS_KEY = 'apollo-user-actions-recent';
 
 function _getUserRecentActions() {
   try { return JSON.parse(localStorage.getItem(_USER_ACTION_RECENTS_KEY) || '[]'); } catch { return []; }
@@ -1848,13 +1819,22 @@ export function displayMetrics(messageElement, metrics) {
   // Keep token counts in the Message Stats popup; the footer should stay slim.
   const costStr0 = cost !== null ? `$${cost < 0.01 ? cost.toFixed(4) : cost.toFixed(3)}` : null;
   const hasTps = tps != null && tps !== 'undefined';
-  const metricsLabel = hasTps
-    ? `${tps} tok/s`
-    : costStr0
-      ? costStr0
-      : responseTime != null
-        ? `${responseTime}s`
-        : '';
+  const isAiMsg = messageElement.classList?.contains('msg-ai');
+  let metricsLabel = '';
+  if (isAiMsg) {
+    const modelShortName = model.split('/').pop();
+    const tokenStr = `${(inputTokens + outputTokens).toLocaleString()} tokens (in: ${inputTokens.toLocaleString()}, out: ${outputTokens.toLocaleString()})`;
+    const speedStr = hasTps ? `${tps} tok/s` : (responseTime ? `${responseTime}s` : '');
+    metricsLabel = `${modelShortName} | ${tokenStr}${speedStr ? ' | ' + speedStr : ''}`;
+  } else {
+    metricsLabel = hasTps
+      ? `${tps} tok/s`
+      : costStr0
+        ? costStr0
+        : responseTime != null
+          ? `${responseTime}s`
+          : '';
+  }
   if (!metricsLabel) return;
   metricsContainer.textContent = metricsLabel;
   metricsContainer.style.cursor = 'pointer';
@@ -1999,7 +1979,7 @@ export function displayMetrics(messageElement, metrics) {
           compactMsg.className = 'msg msg-ai';
           const compactRole = document.createElement('div');
           compactRole.className = 'role';
-          compactRole.textContent = 'Odysseus';
+          compactRole.textContent = 'Apollo';
           const compactBody = document.createElement('div');
           compactBody.className = 'body';
           compactBody.innerHTML = 'Compacting context <span class="compact-wave">▁▂▃▅▂▁</span>';
@@ -2445,7 +2425,7 @@ export function addMessage(role, content, modelName, metadata) {
     const isCompacted = metadata?.compacted;
     const replyModels = replyModelPair(modelName, metadata);
     const resolvedModel = replyModels.actualModel || replyModels.requestedModel;
-    var _roleText = role === 'user' ? 'You' : (isSlash || isCompacted) ? 'Odysseus' : modelRouteLabel(replyModels.requestedModel, resolvedModel);
+    var _roleText = role === 'user' ? 'You' : (isSlash || isCompacted) ? 'Apollo' : modelRouteLabel(replyModels.requestedModel, resolvedModel);
     if (role === 'assistant' && (metadata?.research || metadata?.research_clarification)) {
       _roleText += ' (Research)';
     }
@@ -2479,19 +2459,24 @@ export function addMessage(role, content, modelName, metadata) {
     const _visionBlocks = [];
     if (role === 'user') {
       text = text.replace(
-        /\n*\[Image: ([^\]]+)\]\n([\s\S]*?)(?=\n*\[Image: |\n*\[Image attached: |\n*=== File: |\n*\[PDF content\]:|$)/g,
+        /\n*\[Image: ([^\]]+)\]\n([\s\S]*?)(?=\n*\[Image: |\n*\[Image attached: |\n*=== File: |\n*\[PDF content(?: — [^\]]+)?\]:|\n*\[Document content(?: — [^\]]+)?\]:|$)/g,
         (_m, name, desc) => { const d = desc.trim(); if (d) _visionBlocks.push({ name: name, desc: d }); return ''; }
       );
     }
     // With attachments present, also strip the embedded file/PDF/image-marker text.
-    if (role === 'user' && attachments?.length) {
+    if (role === 'user') {
       // Strip === File: ... === blocks, [PDF content]: blocks, and [Image attached: ...] lines
       text = text
         .replace(/\n*=== File: .+? ===\n\[Type: .+?\]\n+```[\s\S]*?```/g, '')
         .replace(/\n*=== File: .+? ===\n\[Type: .+?\]\n+[\s\S]*?(?=\n*=== File:|$)/g, '')
-        .replace(/\n*\[PDF content\]:[\s\S]*?(?=\n*\[PDF content\]|\n*=== File:|$)/g, '')
+        .replace(/\n*\[PDF content(?: — [^\]]+)?\]:[\s\S]*?(?=\n*\[PDF content(?: — [^\]]+)?\]|\n*\[Document content(?: — [^\]]+)?\]|\n*=== File:|$)/g, '')
         .replace(/\n*\[Image attached: [^\]]+\]/g, '')
+        .replace(/\n*\[Document content(?: — [^\]]+)?\]:[\s\S]*?(?=\n*\[PDF content(?: — [^\]]+)?\]|\n*\[Document content(?: — [^\]]+)?\]|\n*=== File:|$)/g, '')
         .replace(/\n*\[Attached (?:document|non-text) file\]/g, '')
+        .replace(/\n*=== File: [\s\S]*? ===\n*/g, '')
+        .replace(/\n*\[PDF content(?: — [^\]]+)?\]:[\s\S]*/g, '')
+        .replace(/\n*\[Document content(?: — [^\]]+)?\]:[\s\S]*/g, '')
+        .replace(/\n*\[PDF attached:[^\]]*\]/g, '')
         .trim();
     }
 
@@ -2555,13 +2540,16 @@ export function addMessage(role, content, modelName, metadata) {
         b.innerHTML = '<span class="doc-edit-tag">Doc edit: ' + lineRef + '</span> ' + markdownModule.processWithThinking(instrText);
       }
 
-      // Render attachment cards
-      if (attachments?.length) {
-        b.appendChild(buildAttachCards(attachments));
-      }
+    }
+
+    if (attachments) {
+      wrap._attachments = attachments;
     }
 
     wrap.appendChild(r);
+    if (attachments?.length) {
+      wrap.appendChild(buildAttachCards(attachments));
+    }
     wrap.appendChild(b);
 
     // Add stopped indicator + continue button for messages that were stopped by user

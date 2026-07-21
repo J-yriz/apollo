@@ -128,10 +128,15 @@ class AuthManager:
                 # "Invalid credentials" when auth.json was written with
                 # mixed-case keys (e.g. via manual edit or a future migration).
                 if "users" in self._config:
-                    self._config["users"] = {
-                        k.strip().lower(): v
-                        for k, v in self._config["users"].items()
-                    }
+                    normalized = {}
+                    for k, v in self._config["users"].items():
+                        stripped_k = k.strip()
+                        lower_k = stripped_k.lower()
+                        if isinstance(v, dict):
+                            if "username" not in v:
+                                v["username"] = stripped_k
+                        normalized[lower_k] = v
+                    self._config["users"] = normalized
                 logger.info("Auth config loaded")
             else:
                 self._config = {}
@@ -180,6 +185,7 @@ class AuthManager:
                 self._config = {
                     "users": {
                         old_user: {
+                            "username": old_user,
                             "password_hash": old_hash,
                             "created": time.time(),
                             "is_admin": True,
@@ -268,7 +274,8 @@ class AuthManager:
 
     def create_user(self, username: str, password: str, is_admin: bool = False) -> bool:
         """Create a new user account."""
-        username = username.strip().lower()
+        raw_username = username.strip()
+        username = raw_username.lower()
         if not username:
             return False
         if username in RESERVED_USERNAMES:
@@ -280,13 +287,14 @@ class AuthManager:
             if "users" not in self._config:
                 self._config["users"] = {}
             self._config["users"][username] = {
+                "username": raw_username,
                 "password_hash": _hash_password(password),
                 "created": time.time(),
                 "is_admin": is_admin,
                 "privileges": dict(ADMIN_PRIVILEGES if is_admin else DEFAULT_PRIVILEGES),
             }
             self._save()
-        logger.info(f"Created user '{username}' (admin={is_admin})")
+        logger.info(f"Created user '{raw_username}' (admin={is_admin})")
         return True
 
     def delete_user(self, username: str, requesting_user: str) -> bool:
@@ -341,7 +349,8 @@ class AuthManager:
     def rename_user(self, old_username: str, new_username: str, requesting_user: str) -> bool:
         """Rename a user in auth config and active sessions. Admin only."""
         old_username = old_username.strip().lower()
-        new_username = new_username.strip().lower()
+        raw_new_username = new_username.strip()
+        new_username = raw_new_username.lower()
         requesting_user = (requesting_user or "").strip().lower()
         if not old_username or not new_username:
             return False
@@ -351,11 +360,17 @@ class AuthManager:
         with self._config_lock:
             if old_username not in self.users:
                 return False
-            if new_username in self.users:
+            if new_username in self.users and old_username != new_username:
                 return False
             if not self.users.get(requesting_user, {}).get("is_admin"):
                 return False
-            self._config.setdefault("users", {})[new_username] = self._config["users"].pop(old_username)
+            if old_username == new_username:
+                self._config["users"][old_username]["username"] = raw_new_username
+                self._save()
+                return True
+            user_data = self._config["users"].pop(old_username)
+            user_data["username"] = raw_new_username
+            self._config.setdefault("users", {})[new_username] = user_data
             self._save()
 
         renamed_sessions = 0
@@ -369,7 +384,7 @@ class AuthManager:
             self._save_sessions()
         logger.info(
             "Renamed user '%s' -> '%s' (by %s); updated %d active session(s)",
-            old_username, new_username, requesting_user, renamed_sessions,
+            old_username, raw_new_username, requesting_user, renamed_sessions,
         )
         return True
 
@@ -378,7 +393,7 @@ class AuthManager:
 
     def list_users(self) -> List[Dict[str, Any]]:
         return [
-            {"username": u, "is_admin": d.get("is_admin", False), "privileges": self.get_privileges(u)}
+            {"username": d.get("username", u), "is_admin": d.get("is_admin", False), "privileges": self.get_privileges(u)}
             for u, d in self.users.items()
         ]
 
@@ -506,7 +521,7 @@ class AuthManager:
     def totp_get_provisioning_uri(self, username: str, secret: str) -> str:
         """Get the otpauth:// URI for QR code generation."""
         totp = pyotp.TOTP(secret)
-        return totp.provisioning_uri(name=username, issuer_name="Odysseus")
+        return totp.provisioning_uri(name=username, issuer_name="Apollo")
 
     def totp_confirm_enable(self, username: str, code: str) -> bool:
         """Verify a TOTP code against the pending secret, then enable 2FA."""
@@ -676,10 +691,13 @@ class AuthManager:
     def status(self, token: Optional[str]) -> Dict[str, Any]:
         username = self.get_username_for_token(token)
         authenticated = username is not None
+        display_username = username
+        if authenticated:
+            display_username = self.users.get(username, {}).get("username", username)
         result = {
             "configured": self.is_configured,
             "authenticated": authenticated,
-            "username": username,
+            "username": display_username,
             "is_admin": self.is_admin(username) if username else False,
         }
         if authenticated:

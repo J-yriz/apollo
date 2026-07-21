@@ -568,7 +568,7 @@ def setup_chat_routes(
         # Plan mode is not part of the merge-ready UI. Ignore stale clients or
         # manual form posts that still send plan_mode=true.
         plan_mode = False
-        chat_mode = str(form_data.get("mode", "")).lower()  # 'chat' or 'agent'
+        chat_mode = "agent"  # ponytail: always agent mode, chat mode removed
         # Workspace: confine the agent's file/shell tools to this folder.
         workspace, workspace_rejected = _resolve_request_workspace(
             request, form_data.get("workspace")
@@ -587,7 +587,7 @@ def setup_chat_routes(
         # Did the USER explicitly pick agent mode? (vs. us auto-escalating
         # below). Skill extraction should only learn from real agent sessions,
         # not chats we quietly promoted for a notes/calendar intent.
-        user_requested_agent = (chat_mode == "agent")
+        user_requested_agent = True
         _search_enabled = web_search_enabled_for_turn(allow_web_search, use_web)
         # Intent auto-escalation: if the user is clearly asking the assistant
         # to create a todo, reminder, or calendar event, promote chat → agent
@@ -598,7 +598,7 @@ def setup_chat_routes(
         # shell disabled).
         auto_escalated = False
         _tool_intent = _classify_tool_intent(message) if isinstance(message, str) else None
-        if chat_mode == "chat" and _tool_intent and _tool_intent.needs_tools:
+        if False and chat_mode == "chat" and _tool_intent and _tool_intent.needs_tools:
             chat_mode = "agent"
             auto_escalated = True
             logger.info(
@@ -606,7 +606,7 @@ def setup_chat_routes(
                 _tool_intent.category,
                 _tool_intent.reason,
             )
-        elif chat_mode == "chat" and _search_enabled:
+        elif False and chat_mode == "chat" and _search_enabled:
             chat_mode = "agent"
             auto_escalated = True
             logger.info("chat→agent auto-escalation: search enabled")
@@ -703,7 +703,7 @@ def setup_chat_routes(
                     "No model selected for this chat. Open the model picker and choose one before sending.",
                 )
             if (
-                chat_mode == "chat"
+                False  # ponytail: chat_mode is always agent
                 and isinstance(message, str)
                 and (not _tool_intent or not _tool_intent.needs_tools)
                 and _is_contextual_web_followup(message, sess)
@@ -945,8 +945,8 @@ def setup_chat_routes(
             if not _privs.get("can_use_research", True):
                 _research_flags["do"] = False
             if not _privs.get("can_use_agent", True):
-                _effective_mode = 'chat'
-                chat_mode = 'chat'
+                _effective_mode = 'agent'
+                chat_mode = 'agent'
         # Global admin disabled tools
         from src.settings import get_setting
         _global_disabled = get_setting("disabled_tools", [])
@@ -978,7 +978,7 @@ def setup_chat_routes(
             }
             disabled_tools.update(_compare_strip)
             # In chat mode compare, disable ALL agent tools (no bash, python, file ops)
-            if chat_mode == 'chat':
+            if False:  # ponytail: always agent mode
                 disabled_tools.update({"bash", "python", "read_file", "write_file", "web_search", "web_fetch", "search_chats", "manage_tasks"})
 
         # Plan mode: investigate read-only, propose a plan, don't mutate. Block
@@ -1235,6 +1235,7 @@ def setup_chat_routes(
                 _active_streams.pop(session, None)
                 return
             elif chat_mode == "chat":
+                # ponytail: chat_mode is always agent, but keeping fallback branch code intact just in case
                 _chat_start = time.time()
                 _answered_by = None  # set if the selected model failed and a fallback answered
                 _requested_model = sess.model

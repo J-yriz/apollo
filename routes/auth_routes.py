@@ -81,7 +81,7 @@ class SetAdminRequest(BaseModel):
 class SetOpenRegistrationRequest(BaseModel):
     enabled: bool
 
-SESSION_COOKIE = "odysseus_session"
+SESSION_COOKIE = "apollo_session"
 
 
 def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
@@ -141,11 +141,12 @@ def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
         username = body.username.strip().lower()
         if not await asyncio.to_thread(auth_manager.verify_password, username, body.password):
             raise HTTPException(401, "Invalid credentials")
+        display_username = auth_manager.users.get(username, {}).get("username", username)
         # Check 2FA if enabled
         if auth_manager.totp_enabled(username):
             if not body.totp_code:
                 # Password OK but need TOTP — tell client to show code input
-                return {"ok": False, "requires_totp": True, "username": username}
+                return {"ok": False, "requires_totp": True, "username": display_username}
             if not auth_manager.totp_verify(username, body.totp_code):
                 raise HTTPException(401, "Invalid 2FA code")
         # All checks passed — create session (password already verified above)
@@ -163,7 +164,7 @@ def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
         if body.remember:
             cookie_kwargs["max_age"] = TOKEN_TTL
         response.set_cookie(**cookie_kwargs)
-        return {"ok": True, "username": username}
+        return {"ok": True, "username": display_username}
 
     @router.post("/logout")
     async def logout(request: Request, response: Response):
@@ -310,10 +311,17 @@ def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
             raise HTTPException(403, "Admin only")
         old_username = (username or "").strip().lower()
         new_username = (body.username or "").strip().lower()
+        raw_new_username = (body.username or "").strip()
         if not new_username:
             raise HTTPException(400, "Username required")
         if old_username == new_username:
-            return {"ok": True, "username": new_username, "renamed_self": old_username == user}
+            current_raw = auth_manager.users.get(old_username, {}).get("username", old_username)
+            if current_raw != raw_new_username:
+                with auth_manager._config_lock:
+                    if old_username in auth_manager.users:
+                        auth_manager._config["users"][old_username]["username"] = raw_new_username
+                        auth_manager._save()
+            return {"ok": True, "username": raw_new_username, "renamed_self": old_username == user}
         if old_username not in auth_manager.users:
             raise HTTPException(404, "User not found")
         if new_username in auth_manager.users:
@@ -524,7 +532,7 @@ def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
         invalidator = getattr(request.app.state, "invalidate_token_cache", None)
         if callable(invalidator):
             invalidator()
-        return {"ok": True, "username": new_username, "renamed_self": old_username == user}
+        return {"ok": True, "username": raw_new_username, "renamed_self": old_username == user}
 
     @router.put("/users/{username}/admin")
     async def set_user_admin(username: str, body: SetAdminRequest, request: Request):
@@ -747,9 +755,9 @@ def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
             import httpx
             from urllib.parse import urlparse
             # Strip any path/query the user accidentally pasted in the
-            # base URL (e.g. `http://host:8091/odysseus`) — otherwise
+            # base URL (e.g. `http://host:8091/apollo`) — otherwise
             # the topic gets appended after the path and we publish to
-            # `/odysseus/odysseus` (which ntfy 404s on). ntfy itself
+            # `/apollo/apollo` (which ntfy 404s on). ntfy itself
             # only ever serves from the root.
             raw_base = (integ.get("base_url") or "").strip()
             parsed = urlparse(raw_base)
@@ -760,7 +768,7 @@ def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
             api_key = integ.get("api_key", "")
             auth_type = (integ.get("auth_type") or "none").lower()
             headers = {
-                "Title": "Odysseus connectivity test",
+                "Title": "Apollo connectivity test",
                 "Tags": "white_check_mark",
                 "Priority": "default",
             }
@@ -773,7 +781,7 @@ def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
                 async with httpx.AsyncClient(timeout=8.0) as client:
                     r = await client.post(
                         full_url,
-                        content="Connectivity test from Odysseus. If you see this on your phone, ntfy is wired up correctly.",
+                        content="Connectivity test from Apollo. If you see this on your phone, ntfy is wired up correctly.",
                         headers=headers,
                     )
                 if r.is_success:
@@ -804,7 +812,7 @@ def setup_auth_routes(auth_manager: AuthManager) -> APIRouter:
                 return {"ok": False, "message": "No webhook URL set — paste the full Discord webhook URL into the Base URL field."}
             payload = {
                 "embeds": [{
-                    "title": "Odysseus connectivity test",
+                    "title": "Apollo connectivity test",
                     "description": "If you see this, your Discord Webhook integration is wired up correctly.",
                     "color": 5793266,
                 }]
